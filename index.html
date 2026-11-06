@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Videos</title>
+    <script src="https://telegram.org"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #181818; color: #fff; padding: 15px; }
+        .video-card { background: #242424; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-ver { background: #2481cc; color: #fff; }
+        .btn-delete { background: #e53935; color: #fff; display: none; } /* Oculto por defecto */
+    </style>
+</head>
+<body>
+
+    <h2>🎬 Catálogo de Videos Anónimos</h2>
+    <div id="lista-videos">Cargando catálogo...</div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // 1. URL de tu servidor backend (reemplázala por tu IP o dominio HTTPS real)
+        const API_URL = 'https://tu-servidor-backend.com'; 
+
+        async function cargarContenido() {
+            try {
+                // Enviamos "initData" al backend. Telegram firma estos datos criptográficamente 
+                // para que el backend pueda verificar la identidad real del usuario de forma segura.
+                const respuesta = await fetch(`${API_URL}/catalogo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initData: tg.initData })
+                });
+
+                const resultado = await respuesta.json();
+                const contenedor = document.getElementById('lista-videos');
+                contenedor.innerHTML = '';
+
+                resultado.videos.forEach(video => {
+                    const card = document.createElement('div');
+                    card.className = 'video-card';
+                    card.innerHTML = `
+                        <div>
+                            <strong>${video.titulo}</strong> (ID: ${video.id})
+                        </div>
+                        <div>
+                            <button class="btn-ver" onclick="solicitarVideo(${video.id})">Ver</button>
+                            <button class="btn-delete" id="del-${video.id}" onclick="eliminarVideo(${video.id})">Borrar</button>
+                        </div>
+                    `;
+                    contenedor.appendChild(card);
+
+                    // 2. Si el backend confirmó que el usuario actual es ADMIN, hacemos visible el botón de borrar
+                    if (resultado.esAdmin) {
+                        document.getElementById(`del-${video.id}`).style.display = 'inline-block';
+                    }
+                });
+
+            } catch (error) {
+                document.getElementById('lista-videos').innerText = 'Error al conectar con el servidor.';
+            }
+        }
+
+        function solicitarVideo(id) {
+            tg.sendData(JSON.stringify({ action: "descargar", video_id: id }));
+            tg.close();
+        }
+
+        async function eliminarVideo(id) {
+            if (!confirm(`¿Estás seguro de que deseas eliminar el video ID ${id}?`)) return;
+
+            const respuesta = await fetch(`${API_URL}/eliminar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData: tg.initData, video_id: id })
+            });
+
+            const datos = await respuesta.json();
+            if (datos.success) {
+                alert("Video eliminado con éxito");
+                cargarContenido(); // Recargar la lista
+            } else {
+                alert("Error: " + datos.error);
+            }
+        }
+
+        // Inicializar la carga al abrir la app
+        cargarContenido();
+    </script>
+</body>
+</html>
